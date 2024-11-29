@@ -3,10 +3,67 @@ from flask_cors import CORS
 from sqlalchemy import create_engine
 import pandas as pd
 import psycopg2
+import pathlib
+import textwrap
+import google.generativeai as genai
 
+import pandas as pd
+import numpy as np
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 app = Flask(__name__)
 CORS(app)
+def find_related_items(target_product_id, top_n=6):
 
+    text_columns=['descript']
+    product_engine= "postgresql://martech101_fr0f_user:W2FqrFKG6zld1oCd2F3sMs0dYwly0enu@dpg-ct2gvkdsvqrc73aie8i0-a.oregon-postgres.render.com/martech101_fr0f"
+    query="SELECT * FROM product_data"
+    df = pd.read_sql(query, con=product_engine)
+    # Kiểm tra sản phẩm mục tiêu
+    if target_product_id not in df['product_id'].values:
+        raise ValueError(f"Không tìm thấy sản phẩm có ID: {target_product_id}")
+    
+    # Kết hợp các cột văn bản
+    df['combined_text'] = df[text_columns].fillna('').agg(' '.join, axis=1)
+    
+    # Sử dụng TF-IDF để trích xuất đặc trưng văn bản
+    vectorizer = TfidfVectorizer(stop_words='english')
+    tfidf_matrix = vectorizer.fit_transform(df['combined_text'])
+    
+    # Lấy vector của sản phẩm mục tiêu
+    target_index = df[df['product_id'] == target_product_id].index[0]
+    target_vector = tfidf_matrix[target_index]
+    
+    # Tính độ tương đồng cosine
+    cosine_similarities = cosine_similarity(target_vector, tfidf_matrix)[0]
+    
+    # Loại bỏ sản phẩm mục tiêu và sắp xếp
+    similar_indices = cosine_similarities.argsort()[::-1][1:top_n+1]
+    
+    # Trả về các sản phẩm liên quan
+    return df.iloc[similar_indices]
+
+def show_product_information(id_pro):
+    import pathlib
+    import textwrap
+
+    import google.generativeai as genai
+
+    from IPython.display import display
+    from IPython.display import Markdown
+    import pandas as pd
+    import psycopg2
+    from psycopg2 import sql
+    from sqlalchemy import create_engine, text
+    GOOGLE_API_KEY = "AIzaSyDsql1chYKQ0mI68UyhYbgBIfSK2czni3Y"
+    genai.configure(api_key=GOOGLE_API_KEY)
+    model = genai.GenerativeModel('gemini-1.5-flash-latest')
+    product_engine= "postgresql://martech101_fr0f_user:W2FqrFKG6zld1oCd2F3sMs0dYwly0enu@dpg-ct2gvkdsvqrc73aie8i0-a.oregon-postgres.render.com/martech101_fr0f"
+    query="SELECT * FROM product_data WHERE product_id = '"+ str(id_pro)+"'"
+    pd_df = pd.read_sql(query, con=product_engine)
+    response = model.generate_content('bạn có thông tin sản phẩm như sau: '+ str(pd_df.to_string())+ ' hãy miêu tả sinh động sản phẩm cho hấp dẫn người mua, thêm thắt thông tin miêu tả. chỉ trả về kết quả, không giải thích, không ký tự đặc biệt chỉ có dấu . và ,')
+    pd_df['miêu tả sản phẩm']=str(response.text)
+    return pd_df
 # Database Connection URIs
 EVENT_DATABASE_URI = "postgresql://ptt_db1_user:cM056SikCQhRErxbPOCP6qTXJTnjWsc7@dpg-ct4joh23esus73ffski0-a.oregon-postgres.render.com/ptt_db1"
 LOG_DATABASE_URI = "postgresql://martech101_fr0f_user:W2FqrFKG6zld1oCd2F3sMs0dYwly0enu@dpg-ct2gvkdsvqrc73aie8i0-a.oregon-postgres.render.com/martech101_fr0f"
@@ -109,6 +166,54 @@ def get_recommendations(customer_id):
     
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route('/api/related-items/<string:product_id>', methods=['GET'])
+def get_related_items(product_id):
+    """
+    API to find related items for a given product based on text similarity
+    """
+    try:
+        # Number of related items (optional query parameter, default 6)
+        top_n = int(request.args.get('top_n', 6))
+        
+        # Find related items
+        related_items_df = find_related_items(product_id, top_n)
+        
+        # Convert to list of dictionaries for JSON response
+        related_items = related_items_df.to_dict(orient='records')
+        
+        return jsonify({
+            "product_id": product_id, 
+            "related_items": related_items
+        }), 200
+    
+    except ValueError as ve:
+        return jsonify({"error": str(ve)}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+@app.route('/api/product-description/<string:product_id>', methods=['GET'])
+def generate_product_description(product_id):
+    """
+    API to generate an appealing description for a product
+    """
+    try:
+        # Generate product description
+        product_info = show_product_information(product_id)
+        
+        if product_info.empty:
+            return jsonify({"error": "Product not found with this ID."}), 404
+        
+        # Convert result to JSON
+        product_data = product_info.to_dict(orient='records')
+        
+        return jsonify({
+            "product_id": product_id, 
+            "product_description": product_data[0]['miêu tả sản phẩm']
+        }), 200
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
