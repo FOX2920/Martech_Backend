@@ -48,9 +48,6 @@ def show_product_information(id_pro):
     import textwrap
 
     import google.generativeai as genai
-
-    from IPython.display import display
-    from IPython.display import Markdown
     import pandas as pd
     import psycopg2
     from psycopg2 import sql
