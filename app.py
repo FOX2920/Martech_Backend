@@ -41,7 +41,36 @@ GOOGLE_API_KEY = "AIzaSyDsql1chYKQ0mI68UyhYbgBIfSK2czni3Y"
 genai.configure(api_key=GOOGLE_API_KEY)
 model = genai.GenerativeModel('gemini-1.5-flash-latest')
 
+# New Helper Functions
+def find_top_n_related_items_by_keyword_gia(keyword, gia, top_n=10):
+    """Find products by keyword and price."""
+    search_query = """
+    SELECT *
+    FROM product_data
+    WHERE descript ILIKE %(keyword)s AND price = %(gia)s
+    LIMIT %(top_n)s;
+    """
+    params = {
+        'keyword': f"%{keyword}%",
+        'gia': float(gia),
+        'top_n': top_n
+    }
+    try:
+        return pd.read_sql(search_query, product_engine, params=params)
+    except Exception as e:
+        print(f"Error in find_top_n_related_items_by_keyword_gia: {e}")
+        return pd.DataFrame()
 
+def create_cart(customer_id, product_id):
+    """Create a new cart entry."""
+    data = {
+        'customer_id': str(customer_id),
+        'product_id': str(product_id)
+    }
+    df = pd.DataFrame([data])
+    df.to_sql("cart_data", order_engine, if_exists='append', index=False)
+    return True
+    
 # New helper functions
 def record_event(customer_id, product_id, record_type):
     """Record a customer event."""
@@ -417,6 +446,120 @@ class OrderItems(Resource):
                 data.get('shipping_charges', 0)
             )
             return {"message": "Order item created successfully"}, 200
+        except Exception as e:
+            return {"error": str(e)}, 500
+
+@api.route('/api/products/search')
+class ProductSearch(Resource):
+    @api.doc('search_products',
+             params={
+                 'keyword': 'Search keyword',
+                 'price': 'Product price',
+                 'top_n': 'Number of products to return (default: 10)'
+             },
+             responses={
+                 200: 'Success',
+                 404: 'No products found',
+                 500: 'Internal server error'
+             })
+    def get(self):
+        """Search products by keyword and price"""
+        try:
+            keyword = request.args.get('keyword', '')
+            price = float(request.args.get('price', 0))
+            top_n = int(request.args.get('top_n', 10))
+            
+            products_df = find_top_n_related_items_by_keyword_gia(keyword, price, top_n)
+            
+            if products_df.empty:
+                return {"error": "No products found matching the criteria"}, 404
+                
+            return {
+                "keyword": keyword,
+                "price": price,
+                "products": products_df.to_dict(orient='records')
+            }, 200
+        except Exception as e:
+            return {"error": str(e)}, 500
+
+@api.route('/api/cart')
+class Cart(Resource):
+    @api.doc('create_cart',
+             params={
+                 'customer_id': 'The ID of the customer',
+                 'product_id': 'The ID of the product'
+             },
+             responses={
+                 200: 'Success',
+                 500: 'Internal server error'
+             })
+    def post(self):
+        """Add item to cart"""
+        try:
+            data = request.json
+            create_cart(
+                data['customer_id'],
+                data['product_id']
+            )
+            return {"message": "Item added to cart successfully"}, 200
+        except Exception as e:
+            return {"error": str(e)}, 500
+
+    @api.doc('get_cart',
+             params={'customer_id': 'The ID of the customer'},
+             responses={
+                 200: 'Success',
+                 404: 'Cart not found',
+                 500: 'Internal server error'
+             })
+    def get(self):
+        """Get customer's cart items"""
+        try:
+            customer_id = request.args.get('customer_id')
+            query = f"""
+            SELECT c.*, p.*
+            FROM cart_data c
+            JOIN product_data p ON c.product_id = p.product_id
+            WHERE c.customer_id = '{customer_id}'
+            """
+            cart_df = pd.read_sql(query, order_engine)
+            
+            if cart_df.empty:
+                return {"error": "No items found in cart"}, 404
+                
+            return {
+                "customer_id": customer_id,
+                "cart_items": cart_df.to_dict(orient='records')
+            }, 200
+        except Exception as e:
+            return {"error": str(e)}, 500
+
+    @api.doc('delete_cart_item',
+             params={
+                 'customer_id': 'The ID of the customer',
+                 'product_id': 'The ID of the product'
+             },
+             responses={
+                 200: 'Success',
+                 500: 'Internal server error'
+             })
+    def delete(self):
+        """Remove item from cart"""
+        try:
+            customer_id = request.args.get('customer_id')
+            product_id = request.args.get('product_id')
+            
+            query = text("""
+            DELETE FROM cart_data 
+            WHERE customer_id = :customer_id 
+            AND product_id = :product_id
+            """)
+            
+            with order_engine.connect() as conn:
+                conn.execute(query, {"customer_id": customer_id, "product_id": product_id})
+                conn.commit()
+                
+            return {"message": "Item removed from cart successfully"}, 200
         except Exception as e:
             return {"error": str(e)}, 500
             
