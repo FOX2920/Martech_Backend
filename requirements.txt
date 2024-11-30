@@ -7,3 +7,4 @@ gunicorn
 google-generativeai
 requests
 scikit-learn
+flask-restx
