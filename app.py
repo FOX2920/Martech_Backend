@@ -332,6 +332,34 @@ class ProductsByCategory(Resource):
             }, 200
         except Exception as e:
             return {"error": str(e)}, 500
+            
+# Define request models
+order_model = api.model('Order', {
+    'order_id': fields.String(required=True, description='Unique order identifier'),
+    'customer_id': fields.String(required=True, description='Customer identifier'),
+    'order_status': fields.String(required=True, description='Order status'),
+    'order_purchase_timestamp': fields.String(required=True, description='Purchase timestamp'),
+    'total_cost': fields.String(required=True, description='Total cost of the order'),
+    'First_Name': fields.String(required=True, description='Customer first name'),
+    'LastName': fields.String(required=True, description='Customer last name'),
+    'Street_Address': fields.String(required=True, description='Street address'),
+    'Province': fields.String(required=True, description='Province'),
+    'City': fields.String(required=True, description='City'),
+    'Zipcode': fields.String(required=True, description='Zip code'),
+    'Phone': fields.String(required=True, description='Phone number'),
+    'Apt_Suite': fields.String(required=True, description='Apartment/Suite number'),
+    'Email': fields.String(required=True, description='Email address'),
+    'opp_id': fields.String(required=False, description='Opportunity ID'),
+    'Phuong_thuc_thanh_toan': fields.String(required=False, description='Payment method')
+})
+
+order_item_model = api.model('OrderItem', {
+    'order_id': fields.String(required=True, description='Order identifier'),
+    'product_id': fields.String(required=True, description='Product identifier'),
+    'price': fields.String(required=True, description='Price of the item'),
+    'seller_id': fields.String(required=False, description='Seller identifier'),
+    'shipping_charges': fields.Float(required=False, default=0, description='Shipping charges')
+})
 
 @api.route('/api/orders')
 class Orders(Resource):
