@@ -41,6 +41,75 @@ GOOGLE_API_KEY = "AIzaSyDsql1chYKQ0mI68UyhYbgBIfSK2czni3Y"
 genai.configure(api_key=GOOGLE_API_KEY)
 model = genai.GenerativeModel('gemini-1.5-flash-latest')
 
+def find_top_n_related_items_by_keyword(keyword, top_n=10):
+    # SQL query tìm kiếm top_n sản phẩm
+    search_query = """
+    SELECT *
+    FROM product_data
+    WHERE descript ILIKE %(keyword)s
+    LIMIT %(top_n)s;
+    """
+
+    # Tham số tìm kiếm
+    params = {
+        'keyword': f"%{keyword}%",
+        'top_n': top_n
+    }
+
+    # Thực thi truy vấn và đọc kết quả vào DataFrame
+    try:
+        return pd.read_sql(search_query, product_engine, params=params)
+    except Exception as e:
+        print(f"Error in find_top_n_related_items_by_keyword: {e}")
+        return pd.DataFrame()
+
+def find_top_n_related_items_by_keyword_danhmuc(keyword, danhmuc , top_n=10):
+    # SQL query tìm kiếm top_n sản phẩm
+    search_query = """
+    SELECT *
+    FROM product_data
+    WHERE descript ILIKE %(keyword)s AND product_category_name = %(danhmuc)s
+    LIMIT %(top_n)s;
+    """
+
+    # Tham số tìm kiếm
+    params = {
+        'keyword': f"%{keyword}%",
+        'danhmuc': str(danhmuc),
+        'top_n': top_n
+    }
+
+    # Thực thi truy vấn và đọc kết quả vào DataFrame
+    try:
+        return pd.read_sql(search_query, product_engine, params=params)
+    except Exception as e:
+        print(f"Error in find_top_n_related_items_by_keyword_khoang_gia: {e}")
+        return None
+
+def find_top_n_related_items_by_keyword_khoang_gia(keyword, min, max, top_n=10):
+    # SQL query tìm kiếm top_n sản phẩm
+    search_query = """
+    SELECT *
+    FROM product_data
+    WHERE descript ILIKE %(keyword)s AND price >= %(min)s AND price <= %(max)s
+    LIMIT %(top_n)s;
+    """
+
+    # Tham số tìm kiếm
+    params = {
+        'keyword': f"%{keyword}%",
+        'min': float(min),
+        'max': float(max),
+        'top_n': top_n
+    }
+
+    # Thực thi truy vấn và đọc kết quả vào DataFrame
+    try:
+        return pd.read_sql(search_query, product_engine, params=params)
+    except Exception as e:
+        print(f"Error in find_top_n_related_items_by_keyword_khoang_gia: {e}")
+        return None
+        
 # New Helper Functions
 def find_top_n_related_items_by_keyword_gia(keyword, gia, top_n=10):
     """Find products by keyword and price."""
@@ -59,7 +128,7 @@ def find_top_n_related_items_by_keyword_gia(keyword, gia, top_n=10):
         return pd.read_sql(search_query, product_engine, params=params)
     except Exception as e:
         print(f"Error in find_top_n_related_items_by_keyword_gia: {e}")
-        return pd.DataFrame()
+        return None
 
 def create_cart(customer_id, product_id):
     """Create a new cart entry."""
@@ -560,6 +629,159 @@ class Cart(Resource):
                 conn.commit()
                 
             return {"message": "Item removed from cart successfully"}, 200
+        except Exception as e:
+            return {"error": str(e)}, 500
+
+# Define the request model for user creation
+user_model = api.model('User', {
+    'customer_id': fields.String(required=True, description='Unique customer identifier'),
+    'customer_zip_code_prefix': fields.String(required=True, description='Customer zip code prefix'),
+    'customer_city': fields.String(required=True, description='City of the customer'),
+    'customer_state': fields.String(required=True, description='State of the customer'),
+    'email': fields.String(required=True, description='Email of the customer'),
+    'name': fields.String(required=True, description='Name of the customer'),
+    'phone': fields.String(required=True, description='Phone number of the customer'),
+    'password': fields.String(required=True, description='Password of the customer'),
+    'taikhoan': fields.String(required=True, description='Account information'),
+    'khung_gio_vao_web_trung_binh': fields.String(required=False, description='Average time the customer enters the website'),
+    'ngay_mua_tiep_theo': fields.String(required=False, description='Date of the next purchase'),
+    'opp_id': fields.String(required=False, description='Opportunity ID')
+})
+
+@api.route('/api/user')
+class User(Resource):
+    @api.doc('create_user',
+             responses={
+                 200: 'User created successfully',
+                 400: 'Invalid request',
+                 500: 'Internal server error'
+             })
+    @api.expect(user_model, validate=True)
+    def post(self):
+        """Create a new user"""
+        try:
+            data = request.json
+            create_user(
+                data['customer_id'],
+                data['customer_zip_code_prefix'],
+                data['customer_city'],
+                data['customer_state'],
+                data['email'],
+                data['name'],
+                data['phone'],
+                data['password'],
+                data['taikhoan'],
+                data.get('khung_gio_vao_web_trung_binh', ''),
+                data.get('ngay_mua_tiep_theo', ''),
+                data.get('opp_id', '')
+            )
+            return {"message": "User created successfully"}, 200
+        except Exception as e:
+            return {"error": str(e)}, 500
+
+# Search Products with Price Range
+@api.route('/api/products/search/price-range')
+class ProductSearchPriceRange(Resource):
+    @api.doc('search_products_price_range',
+             params={
+                 'keyword': 'Search keyword',
+                 'min_price': 'Minimum price',
+                 'max_price': 'Maximum price',
+                 'top_n': 'Number of products to return (default: 10)'
+             },
+             responses={
+                 200: 'Success',
+                 404: 'No products found',
+                 500: 'Internal server error'
+             })
+    def get(self):
+        """Search products by keyword and price range"""
+        try:
+            keyword = request.args.get('keyword', '')
+            min_price = float(request.args.get('min_price', 0))
+            max_price = float(request.args.get('max_price', float('inf')))
+            top_n = int(request.args.get('top_n', 10))
+            
+            products_df = find_top_n_related_items_by_keyword_khoang_gia(
+                keyword, min_price, max_price, top_n
+            )
+            
+            if products_df is None or products_df.empty:
+                return {"error": "No products found matching the criteria"}, 404
+                
+            return {
+                "keyword": keyword,
+                "min_price": min_price,
+                "max_price": max_price,
+                "products": products_df.to_dict(orient='records')
+            }, 200
+        except Exception as e:
+            return {"error": str(e)}, 500
+
+# Search Products by Category and Keyword
+@api.route('/api/products/search/category')
+class ProductSearchCategory(Resource):
+    @api.doc('search_products_category',
+             params={
+                 'keyword': 'Search keyword',
+                 'category': 'Product category',
+                 'top_n': 'Number of products to return (default: 10)'
+             },
+             responses={
+                 200: 'Success',
+                 404: 'No products found',
+                 500: 'Internal server error'
+             })
+    def get(self):
+        """Search products by keyword and category"""
+        try:
+            keyword = request.args.get('keyword', '')
+            category = request.args.get('category', '')
+            top_n = int(request.args.get('top_n', 10))
+            
+            products_df = find_top_n_related_items_by_keyword_danhmuc(
+                keyword, category, top_n
+            )
+            
+            if products_df is None or products_df.empty:
+                return {"error": "No products found matching the criteria"}, 404
+                
+            return {
+                "keyword": keyword,
+                "category": category,
+                "products": products_df.to_dict(orient='records')
+            }, 200
+        except Exception as e:
+            return {"error": str(e)}, 500
+
+# Simple Keyword Search
+@api.route('/api/products/search/keyword')
+class ProductSearchKeyword(Resource):
+    @api.doc('search_products_keyword',
+             params={
+                 'keyword': 'Search keyword',
+                 'top_n': 'Number of products to return (default: 10)'
+             },
+             responses={
+                 200: 'Success',
+                 404: 'No products found',
+                 500: 'Internal server error'
+             })
+    def get(self):
+        """Search products by keyword only"""
+        try:
+            keyword = request.args.get('keyword', '')
+            top_n = int(request.args.get('top_n', 10))
+            
+            products_df = find_top_n_related_items_by_keyword(keyword, top_n)
+            
+            if products_df.empty:
+                return {"error": "No products found matching the criteria"}, 404
+                
+            return {
+                "keyword": keyword,
+                "products": products_df.to_dict(orient='records')
+            }, 200
         except Exception as e:
             return {"error": str(e)}, 500
             
