@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_restx import Api, Resource, fields
 from sqlalchemy import create_engine
@@ -142,7 +142,7 @@ class Recommendations(Resource):
     def get(self, customer_id):
         """Get product recommendations for a customer"""
         try:
-            n_top = int(api.payload.get('n_top', 10)) if api.payload else 10
+            n_top = int(request.args.get('n_top', 10))
             recommend_product_df = show_product(customer_id, n_top)
             
             if recommend_product_df.empty:
@@ -170,7 +170,7 @@ class RelatedItems(Resource):
     def get(self, product_id):
         """Get related items for a product"""
         try:
-            top_n = int(api.payload.get('top_n', 6)) if api.payload else 6
+            top_n = int(request.args.get('top_n', 6))
             related_items_df = find_related_items(product_id, top_n).to_dict(orient='records')
             
             return {
