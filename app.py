@@ -6,7 +6,7 @@ import pandas as pd
 import google.generativeai as genai
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-
+import datetime
 # Initialize Flask app
 app = Flask(__name__)
 CORS(app)
@@ -26,20 +26,93 @@ api = Api(
 DATABASE_CONFIG = {
     'EVENT_URI': "postgresql://ptt_db1_user:cM056SikCQhRErxbPOCP6qTXJTnjWsc7@dpg-ct4joh23esus73ffski0-a.oregon-postgres.render.com/ptt_db1",
     'LOG_URI': "postgresql://martech101_fr0f_user:W2FqrFKG6zld1oCd2F3sMs0dYwly0enu@dpg-ct2gvkdsvqrc73aie8i0-a.oregon-postgres.render.com/martech101_fr0f",
-    'PRODUCT_URI': "postgresql://martech101_fr0f_user:W2FqrFKG6zld1oCd2F3sMs0dYwly0enu@dpg-ct2gvkdsvqrc73aie8i0-a.oregon-postgres.render.com/martech101_fr0f"
-    
+    'PRODUCT_URI': "postgresql://martech101_fr0f_user:W2FqrFKG6zld1oCd2F3sMs0dYwly0enu@dpg-ct2gvkdsvqrc73aie8i0-a.oregon-postgres.render.com/martech101_fr0f",
+    'ORDER_URI': "postgresql://ptt_db2_user:jCcmpSkXRsKUYWr50uXRwTkvkmD9LVro@dpg-ct4jp4aj1k6c73egvbq0-a.oregon-postgres.render.com/ptt_db2"
 }
 
 # Create database engines
 event_engine = create_engine(DATABASE_CONFIG['EVENT_URI'])
 log_engine = create_engine(DATABASE_CONFIG['LOG_URI'])
 product_engine = create_engine(DATABASE_CONFIG['PRODUCT_URI'])
+order_engine = create_engine(DATABASE_CONFIG['ORDER_URI'])
 
 # Configure Google AI
 GOOGLE_API_KEY = "AIzaSyDsql1chYKQ0mI68UyhYbgBIfSK2czni3Y"
 genai.configure(api_key=GOOGLE_API_KEY)
 model = genai.GenerativeModel('gemini-1.5-flash-latest')
 
+
+# New helper functions
+def record_event(customer_id, product_id, record_type):
+    """Record a customer event."""
+    data = {
+        "customer_id": str(customer_id),
+        "id_product": str(product_id),
+        "event_type": str(record_type),
+        "event_time": str(datetime.datetime.now()),
+        "date": str(datetime.date.today())
+    }
+    df = pd.DataFrame([data])
+    df.to_sql("event_data", event_engine, if_exists='append', index=False)
+    return True
+
+def show_product_by_danhmuc(danhmuc, top_n=10):
+    """Get products by category."""
+    search_query = """
+    SELECT *
+    FROM product_data
+    WHERE product_category_name = %(danhmuc)s
+    LIMIT %(top_n)s;
+    """
+    params = {
+        'danhmuc': str(danhmuc),
+        'top_n': top_n
+    }
+    try:
+        return pd.read_sql(search_query, product_engine, params=params)
+    except Exception as e:
+        print(f"Error in show_product_by_danhmuc: {e}")
+        return pd.DataFrame()
+
+def create_order(order_id, customer_id, order_status, order_purchase_timestamp,
+                total_cost, First_Name, LastName, Street_Address, Province,
+                City, Zipcode, Phone, Apt_Suite, Email, opp_id='',
+                Phuong_thuc_thanh_toan=''):
+    """Create a new order."""
+    data = {
+        'order_id': str(order_id),
+        'customer_id': str(customer_id),
+        'order_status': str(order_status),
+        'order_purchase_timestamp': str(order_purchase_timestamp),
+        'total cost': str(total_cost),
+        'opp_id': str(opp_id),
+        'First_Name': str(First_Name),
+        'LastName': str(LastName),
+        'Street_Address': str(Street_Address),
+        'Province': str(Province),
+        'City': str(City),
+        'Zipcode': str(Zipcode),
+        'Phone': str(Phone),
+        'Apt_Suite': str(Apt_Suite),
+        'Email': str(Email),
+        'Phuong_thuc_thanh_toan': str(Phuong_thuc_thanh_toan)
+    }
+    df = pd.DataFrame([data])
+    df.to_sql("order_data", order_engine, if_exists='append', index=False)
+    return True
+
+def create_order_item(order_id, product_id, price, seller_id='', shipping_charges=0):
+    """Create a new order item."""
+    data = {
+        'order_id': str(order_id),
+        'product_id': str(product_id),
+        'seller_id': str(seller_id),
+        'price': str(price),
+        'shipping_charges': str(shipping_charges)
+    }
+    df = pd.DataFrame([data])
+    df.to_sql("order_item_data", order_engine, if_exists='append', index=False)
+    return True
 # Helper functions remain the same
 def find_related_items(target_product_id, top_n=6):
     """Find related products based on text similarity."""
@@ -203,6 +276,117 @@ class ProductDescription(Resource):
                 "product_id": product_id,
                 "product_description": product_info.to_dict(orient='records')[0]['miêu tả sản phẩm']
             }, 200
+        except Exception as e:
+            return {"error": str(e)}, 500
+
+# New API Routes
+@api.route('/api/event')
+class EventRecord(Resource):
+    @api.doc('record_event',
+             params={
+                 'customer_id': 'The ID of the customer',
+                 'product_id': 'The ID of the product',
+                 'record_type': 'The type of event'
+             },
+             responses={
+                 200: 'Success',
+                 500: 'Internal server error'
+             })
+    def post(self):
+        """Record a customer event"""
+        try:
+            data = request.json
+            record_event(
+                data['customer_id'],
+                data['product_id'],
+                data['record_type']
+            )
+            return {"message": "Event recorded successfully"}, 200
+        except Exception as e:
+            return {"error": str(e)}, 500
+
+@api.route('/api/products/category/<string:category>')
+class ProductsByCategory(Resource):
+    @api.doc('get_products_by_category',
+             params={
+                 'category': 'The category name',
+                 'top_n': 'Number of products to return (default: 10)'
+             },
+             responses={
+                 200: 'Success',
+                 404: 'No products found',
+                 500: 'Internal server error'
+             })
+    def get(self, category):
+        """Get products by category"""
+        try:
+            top_n = int(request.args.get('top_n', 10))
+            products_df = show_product_by_danhmuc(category, top_n)
+            
+            if products_df.empty:
+                return {"error": "No products found in this category"}, 404
+                
+            return {
+                "category": category,
+                "products": products_df.to_dict(orient='records')
+            }, 200
+        except Exception as e:
+            return {"error": str(e)}, 500
+
+@api.route('/api/orders')
+class Orders(Resource):
+    @api.doc('create_order',
+             responses={
+                 200: 'Success',
+                 400: 'Invalid request',
+                 500: 'Internal server error'
+             })
+    def post(self):
+        """Create a new order"""
+        try:
+            data = request.json
+            create_order(
+                data['order_id'],
+                data['customer_id'],
+                data['order_status'],
+                data['order_purchase_timestamp'],
+                data['total_cost'],
+                data['First_Name'],
+                data['LastName'],
+                data['Street_Address'],
+                data['Province'],
+                data['City'],
+                data['Zipcode'],
+                data['Phone'],
+                data['Apt_Suite'],
+                data['Email'],
+                data.get('opp_id', ''),
+                data.get('Phuong_thuc_thanh_toan', '')
+            )
+            return {"message": "Order created successfully"}, 200
+        except Exception as e:
+            return {"error": str(e)}, 500
+
+@api.route('/api/order-items')
+class OrderItems(Resource):
+    @api.doc('create_order_item',
+             responses={
+                 200: 'Success',
+                 400: 'Invalid request',
+                 500: 'Internal server error'
+             })
+    def post(self):
+        """Create a new order item"""
+        try:
+            data = request.json
+            create_order_item(
+                data['order_id'],
+                data['product_id'],
+                data['price'],
+                data.get('seller_id', ''),
+                data.get('shipping_charges', 0)
+            )
+            return {"message": "Order item created successfully"}, 200
         except Exception as e:
             return {"error": str(e)}, 500
 
