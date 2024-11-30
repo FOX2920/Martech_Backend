@@ -27,6 +27,7 @@ DATABASE_CONFIG = {
     'EVENT_URI': "postgresql://ptt_db1_user:cM056SikCQhRErxbPOCP6qTXJTnjWsc7@dpg-ct4joh23esus73ffski0-a.oregon-postgres.render.com/ptt_db1",
     'LOG_URI': "postgresql://martech101_fr0f_user:W2FqrFKG6zld1oCd2F3sMs0dYwly0enu@dpg-ct2gvkdsvqrc73aie8i0-a.oregon-postgres.render.com/martech101_fr0f",
     'PRODUCT_URI': "postgresql://martech101_fr0f_user:W2FqrFKG6zld1oCd2F3sMs0dYwly0enu@dpg-ct2gvkdsvqrc73aie8i0-a.oregon-postgres.render.com/martech101_fr0f"
+    
 }
 
 # Create database engines
@@ -170,11 +171,11 @@ class RelatedItems(Resource):
         """Get related items for a product"""
         try:
             top_n = int(api.payload.get('top_n', 6)) if api.payload else 6
-            related_items_df = find_related_items(product_id, top_n)
+            related_items_df = find_related_items(product_id, top_n).to_dict(orient='records')
             
             return {
                 "product_id": product_id,
-                "related_items": related_items_df.to_dict(orient='records')
+                "related_items": related_items_df
             }, 200
         except ValueError as ve:
             return {"error": str(ve)}, 404
