@@ -11,8 +11,10 @@ import pandas as pd
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from flask_restx import Api
 app = Flask(__name__)
 CORS(app)
+api = Api(app, version='1.0', title='Product Recommendation API', description='API cho hệ thống gợi ý sản phẩm', doc='/swagger')
 def find_related_items(target_product_id, top_n=6):
 
     text_columns=['descript']
