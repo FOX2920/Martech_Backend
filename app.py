@@ -693,7 +693,7 @@ class Cart(Resource):
             data = request.json
             query = """
                 INSERT INTO cart_data (customer_id, product_id)
-                VALUES (%(customer_id)s, %(product_id)s)
+                VALUES (:customer_id, :product_id)
             """
             
             with cart_engine.connect() as conn:
