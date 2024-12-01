@@ -25,8 +25,8 @@ api = Api(
 # Database Configuration
 DATABASE_CONFIG = {
     'EVENT_URI': "postgresql://ptt_db1_user:cM056SikCQhRErxbPOCP6qTXJTnjWsc7@dpg-ct4joh23esus73ffski0-a.oregon-postgres.render.com/ptt_db1",
-    'LOG_URI': "postgresql://martech101_fr0f_user:W2FqrFKG6zld1oCd2F3sMs0dYwly0enu@dpg-ct2gvkdsvqrc73aie8i0-a.oregon-postgres.render.com/martech101_fr0f",
-    'PRODUCT_URI': "postgresql://martech101_fr0f_user:W2FqrFKG6zld1oCd2F3sMs0dYwly0enu@dpg-ct2gvkdsvqrc73aie8i0-a.oregon-postgres.render.com/martech101_fr0f",
+    'LOG_URI': "postgresql://ptt_db3_user:HNGNAc9xuyZAByLyJUkGqdM0QJbgOXBz@dpg-ct60msbv2p9s7394d94g-a.oregon-postgres.render.com/ptt_db3",
+    'PRODUCT_URI': "postgresql://ptt_db3_user:HNGNAc9xuyZAByLyJUkGqdM0QJbgOXBz@dpg-ct60msbv2p9s7394d94g-a.oregon-postgres.render.com/ptt_db3",
     'ORDER_URI': "postgresql://ptt_db2_user:jCcmpSkXRsKUYWr50uXRwTkvkmD9LVro@dpg-ct4jp4aj1k6c73egvbq0-a.oregon-postgres.render.com/ptt_db2"
 }
 
