@@ -172,6 +172,88 @@ def create_cart(customer_id, product_id):
     except Exception as e:
         print(f"Error in create_cart: {e}")
         raise
+
+def get_cart_items(customer_id):
+    """
+    Get all cart items for a specific customer.
+    Args:
+        customer_id (str): Customer ID
+    Returns:
+        pandas.DataFrame: DataFrame containing cart items
+    """
+    try:
+        query = text("""
+            SELECT c.*, p.*
+            FROM cart_data c
+            JOIN product_data p ON c.product_id = p.product_id
+            WHERE c.customer_id = :customer_id
+        """)
+        
+        with cart_engine.connect() as conn:
+            result = pd.read_sql(
+                query,
+                conn,
+                params={"customer_id": str(customer_id)}
+            )
+            
+        return result
+        
+    except Exception as e:
+        print(f"Error in get_cart_items: {e}")
+        raise
+
+def remove_cart_item(customer_id, product_id):
+    """
+    Remove an item from the cart.
+    Args:
+        customer_id (str): Customer ID
+        product_id (str): Product ID
+    Returns:
+        bool: True if successful, raises exception otherwise
+    """
+    try:
+        delete_query = text("""
+            DELETE FROM cart_data 
+            WHERE customer_id = :customer_id 
+            AND product_id = :product_id
+        """)
+        
+        with cart_engine.connect() as conn:
+            conn.execute(delete_query, {
+                "customer_id": str(customer_id),
+                "product_id": str(product_id)
+            })
+            conn.commit()
+            
+        return True
+        
+    except Exception as e:
+        print(f"Error in remove_cart_item: {e}")
+        raise
+
+def clear_cart(customer_id):
+    """
+    Remove all items from a customer's cart.
+    Args:
+        customer_id (str): Customer ID
+    Returns:
+        bool: True if successful, raises exception otherwise
+    """
+    try:
+        delete_query = text("""
+            DELETE FROM cart_data 
+            WHERE customer_id = :customer_id
+        """)
+        
+        with cart_engine.connect() as conn:
+            conn.execute(delete_query, {"customer_id": str(customer_id)})
+            conn.commit()
+            
+        return True
+        
+    except Exception as e:
+        print(f"Error in clear_cart: {e}")
+        raise
     
 # New helper functions
 def record_event(customer_id, product_id, record_type):
@@ -618,13 +700,7 @@ class Cart(Resource):
         """Get customer's cart items"""
         try:
             customer_id = request.args.get('customer_id')
-            query = f"""
-            SELECT c.*, p.*
-            FROM cart_data c
-            JOIN product_data p ON c.product_id = p.product_id
-            WHERE c.customer_id = '{customer_id}'
-            """
-            cart_df = pd.read_sql(query, order_engine)
+            cart_df = get_cart_items(customer_id)
             
             if cart_df.empty:
                 return {"error": "No items found in cart"}, 404
@@ -635,7 +711,7 @@ class Cart(Resource):
             }, 200
         except Exception as e:
             return {"error": str(e)}, 500
-
+            
     @api.doc('delete_cart_item',
              params={
                  'customer_id': 'The ID of the customer',
