@@ -248,7 +248,7 @@ def show_product_information(id_pro):
 def show_product(id_cus, n_top=10):
     """Generate product recommendations for a customer."""
     try:
-        query = f"SELECT * FROM log_recommand WHERE customer_id = '{id_cus}'"
+        query = f"SELECT * FROM log_recommand_data WHERE customer_id = '{id_cus}'"
         log_df = pd.read_sql(query, con=log_engine)
         
         if not log_df.empty:
