@@ -131,50 +131,16 @@ def find_top_n_related_items_by_keyword_gia(keyword, gia, top_n=10):
         print(f"Error in find_top_n_related_items_by_keyword_gia: {e}")
         return None
 
-def create_cart(customer_id, product_id):
-    """
-    Create a new cart entry or update existing one.
-    Args:
-        customer_id (str): Customer ID
-        product_id (str): Product ID
-    Returns:
-        bool: True if successful, False otherwise
-    """
-    try:
-        # Check if item already exists in cart
-        check_query = """
-            SELECT * FROM cart_data 
-            WHERE customer_id = %(customer_id)s 
-            AND product_id = %(product_id)s
-        """
+def create_cart(customer_id, id_product):
+   data = {
+        'customer_id': str(customer_id),
+        'id_product': str(id_product),
+    }
+    df = pd.DataFrame([data])
+    df.to_sql("order_data", cart_engine, if_exists='append', index=False)
+    return True
         
-        with cart_engine.connect() as conn:
-            result = pd.read_sql(
-                check_query,
-                conn,
-                params={
-                    "customer_id": str(customer_id),
-                    "product_id": str(product_id)
-                }
-            )
-            
-            if result.empty:
-                # If item doesn't exist, create new entry
-                insert_query = """
-                    INSERT INTO cart_data (customer_id, product_id)
-                    VALUES (%(customer_id)s, %(product_id)s)
-                """
-                conn.execute(text(insert_query), {
-                    "customer_id": str(customer_id),
-                    "product_id": str(product_id)
-                })
-                conn.commit()
-                
-        return True
-        
-    except Exception as e:
-        print(f"Error in create_cart: {e}")
-        return False
+
 
 def get_cart_items(customer_id):
     """
@@ -674,7 +640,7 @@ class ProductSearch(Resource):
 # Cart model for documentation
 cart_model = api.model('Cart', {
     'customer_id': fields.String(required=True, description='Customer identifier'),
-    'product_id': fields.String(required=True, description='Product identifier')
+    'id_product': fields.String(required=True, description='Product identifier')
 })
 
 
@@ -687,23 +653,15 @@ class Cart(Resource):
                  500: 'Internal server error'
              })
     @api.expect(cart_model)
-    def post(self):
-        """Add item to cart"""
+   def post(self):
+        """Create a new order"""
         try:
             data = request.json
-            query = """
-                INSERT INTO cart_data (customer_id, product_id)
-                VALUES (:customer_id, :product_id)
-            """
-            
-            with cart_engine.connect() as conn:
-                conn.execute(text(query), {
-                    "customer_id": str(data['customer_id']),
-                    "product_id": str(data['product_id'])
-                })
-                conn.commit()
-            
-            return {"message": "Item added to cart successfully"}, 200
+            create_cart(
+                data['customer_id'],
+                data['id_product']
+            )
+            return {"message": "Cart created successfully"}, 200
         except Exception as e:
             return {"error": str(e)}, 500
 
@@ -724,7 +682,7 @@ class Cart(Resource):
             query = """
                 SELECT c.*, p.*
                 FROM cart_data c
-                JOIN product_data p ON c.product_id = p.product_id
+                JOIN product_data p ON c.id_product = p.id_product
                 WHERE c.customer_id = %(customer_id)s
             """
             
@@ -744,7 +702,7 @@ class Cart(Resource):
     @api.doc('delete_cart_item',
              params={
                  'customer_id': 'The ID of the customer',
-                 'product_id': 'The ID of the product'
+                 'id_product': 'The ID of the product'
              },
              responses={
                  200: 'Success',
@@ -755,7 +713,7 @@ class Cart(Resource):
         """Remove item from cart"""
         try:
             customer_id = request.args.get('customer_id')
-            product_id = request.args.get('product_id')
+            id_product = request.args.get('id_product')
             
             if not customer_id or not product_id:
                 return {"error": "Both customer_id and product_id are required"}, 400
@@ -763,13 +721,13 @@ class Cart(Resource):
             query = """
                 DELETE FROM cart_data 
                 WHERE customer_id = %(customer_id)s 
-                AND product_id = %(product_id)s
+                AND id_product = %(id_product)s
             """
             
             with cart_engine.connect() as conn:
                 conn.execute(text(query), {
                     "customer_id": str(customer_id),
-                    "product_id": str(product_id)
+                    "id_product": str(id_product)
                 })
                 conn.commit()
             
