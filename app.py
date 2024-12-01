@@ -132,14 +132,14 @@ def find_top_n_related_items_by_keyword_gia(keyword, gia, top_n=10):
         return None
 
 def create_cart(customer_id, id_product):
-   data = {
+    data = {
         'customer_id': str(customer_id),
         'id_product': str(id_product),
     }
-    df = pd.DataFrame([data])
+    df = pd.DataFrame([data])  # Đảm bảo thụt lề phù hợp
     df.to_sql("cart_data", cart_engine, if_exists='append', index=False)
     return True
-        
+
 
 
 def get_cart_items(customer_id):
