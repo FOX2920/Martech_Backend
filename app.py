@@ -675,12 +675,20 @@ class Cart(Resource):
              },
              responses={
                  200: 'Success',
+                 415: 'Unsupported Media Type',
                  500: 'Internal server error'
              })
+    @api.expect(api.model('CartItem', {
+        'customer_id': fields.String(required=True, description='Customer identifier'),
+        'product_id': fields.String(required=True, description='Product identifier')
+    }))
     def post(self):
         """Add item to cart"""
+        if not request.is_json:
+            return {"error": "Request must be JSON"}, 415
+            
         try:
-            data = request.json
+            data = request.get_json()
             create_cart(
                 data['customer_id'],
                 data['product_id']
@@ -727,16 +735,10 @@ class Cart(Resource):
             customer_id = request.args.get('customer_id')
             product_id = request.args.get('product_id')
             
-            query = text("""
-            DELETE FROM cart_data 
-            WHERE customer_id = :customer_id 
-            AND product_id = :product_id
-            """)
-            
-            with order_engine.connect() as conn:
-                conn.execute(query, {"customer_id": customer_id, "product_id": product_id})
-                conn.commit()
+            if not customer_id or not product_id:
+                return {"error": "Both customer_id and product_id are required"}, 400
                 
+            remove_cart_item(customer_id, product_id)
             return {"message": "Item removed from cart successfully"}, 200
         except Exception as e:
             return {"error": str(e)}, 500
