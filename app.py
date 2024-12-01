@@ -1,7 +1,7 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_restx import Api, Resource, fields
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 import pandas as pd
 import google.generativeai as genai
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -138,30 +138,33 @@ def create_cart(customer_id, product_id):
         customer_id (str): Customer ID
         product_id (str): Product ID
     Returns:
-        bool: True if successful, raises exception otherwise
+        bool: True if successful, False otherwise
     """
     try:
-        # First check if the item already exists in cart
-        check_query = text("""
+        # Check if item already exists in cart
+        check_query = """
             SELECT * FROM cart_data 
-            WHERE customer_id = :customer_id 
-            AND product_id = :product_id
-        """)
+            WHERE customer_id = %(customer_id)s 
+            AND product_id = %(product_id)s
+        """
         
         with cart_engine.connect() as conn:
-            result = conn.execute(check_query, {
-                "customer_id": str(customer_id),
-                "product_id": str(product_id)
-            })
-            existing_item = result.fetchone()
+            result = pd.read_sql(
+                check_query,
+                conn,
+                params={
+                    "customer_id": str(customer_id),
+                    "product_id": str(product_id)
+                }
+            )
             
-            if existing_item is None:
+            if result.empty:
                 # If item doesn't exist, create new entry
-                insert_query = text("""
+                insert_query = """
                     INSERT INTO cart_data (customer_id, product_id)
-                    VALUES (:customer_id, :product_id)
-                """)
-                conn.execute(insert_query, {
+                    VALUES (%(customer_id)s, %(product_id)s)
+                """
+                conn.execute(text(insert_query), {
                     "customer_id": str(customer_id),
                     "product_id": str(product_id)
                 })
@@ -171,7 +174,7 @@ def create_cart(customer_id, product_id):
         
     except Exception as e:
         print(f"Error in create_cart: {e}")
-        raise
+        return False
 
 def get_cart_items(customer_id):
     """
@@ -179,15 +182,15 @@ def get_cart_items(customer_id):
     Args:
         customer_id (str): Customer ID
     Returns:
-        pandas.DataFrame: DataFrame containing cart items
+        pandas.DataFrame: DataFrame containing cart items with product details
     """
     try:
-        query = text("""
+        query = """
             SELECT c.*, p.*
             FROM cart_data c
             JOIN product_data p ON c.product_id = p.product_id
-            WHERE c.customer_id = :customer_id
-        """)
+            WHERE c.customer_id = %(customer_id)s
+        """
         
         with cart_engine.connect() as conn:
             result = pd.read_sql(
@@ -200,7 +203,7 @@ def get_cart_items(customer_id):
         
     except Exception as e:
         print(f"Error in get_cart_items: {e}")
-        raise
+        return pd.DataFrame()
 
 def remove_cart_item(customer_id, product_id):
     """
@@ -209,17 +212,17 @@ def remove_cart_item(customer_id, product_id):
         customer_id (str): Customer ID
         product_id (str): Product ID
     Returns:
-        bool: True if successful, raises exception otherwise
+        bool: True if successful, False otherwise
     """
     try:
-        delete_query = text("""
+        delete_query = """
             DELETE FROM cart_data 
-            WHERE customer_id = :customer_id 
-            AND product_id = :product_id
-        """)
+            WHERE customer_id = %(customer_id)s 
+            AND product_id = %(product_id)s
+        """
         
         with cart_engine.connect() as conn:
-            conn.execute(delete_query, {
+            conn.execute(text(delete_query), {
                 "customer_id": str(customer_id),
                 "product_id": str(product_id)
             })
@@ -229,7 +232,7 @@ def remove_cart_item(customer_id, product_id):
         
     except Exception as e:
         print(f"Error in remove_cart_item: {e}")
-        raise
+        return False
 
 def clear_cart(customer_id):
     """
@@ -237,24 +240,26 @@ def clear_cart(customer_id):
     Args:
         customer_id (str): Customer ID
     Returns:
-        bool: True if successful, raises exception otherwise
+        bool: True if successful, False otherwise
     """
     try:
-        delete_query = text("""
+        delete_query = """
             DELETE FROM cart_data 
-            WHERE customer_id = :customer_id
-        """)
+            WHERE customer_id = %(customer_id)s
+        """
         
         with cart_engine.connect() as conn:
-            conn.execute(delete_query, {"customer_id": str(customer_id)})
+            conn.execute(text(delete_query), {
+                "customer_id": str(customer_id)
+            })
             conn.commit()
             
         return True
         
     except Exception as e:
         print(f"Error in clear_cart: {e}")
-        raise
-    
+        return False
+
 # New helper functions
 def record_event(customer_id, product_id, record_type):
     """Record a customer event."""
@@ -666,6 +671,7 @@ class ProductSearch(Resource):
         except Exception as e:
             return {"error": str(e)}, 500
 
+
 @api.route('/api/cart')
 class Cart(Resource):
     @api.doc('create_cart',
@@ -675,6 +681,7 @@ class Cart(Resource):
              },
              responses={
                  200: 'Success',
+                 400: 'Bad Request',
                  415: 'Unsupported Media Type',
                  500: 'Internal server error'
              })
@@ -689,11 +696,16 @@ class Cart(Resource):
             
         try:
             data = request.get_json()
-            create_cart(
+            success = create_cart(
                 data['customer_id'],
                 data['product_id']
             )
-            return {"message": "Item added to cart successfully"}, 200
+            
+            if success:
+                return {"message": "Item added to cart successfully"}, 200
+            else:
+                return {"error": "Failed to add item to cart"}, 500
+                
         except Exception as e:
             return {"error": str(e)}, 500
 
@@ -708,10 +720,13 @@ class Cart(Resource):
         """Get customer's cart items"""
         try:
             customer_id = request.args.get('customer_id')
+            if not customer_id:
+                return {"error": "customer_id is required"}, 400
+                
             cart_df = get_cart_items(customer_id)
             
             if cart_df.empty:
-                return {"error": "No items found in cart"}, 404
+                return {"message": "Cart is empty", "cart_items": []}, 200
                 
             return {
                 "customer_id": customer_id,
@@ -727,6 +742,7 @@ class Cart(Resource):
              },
              responses={
                  200: 'Success',
+                 400: 'Bad Request',
                  500: 'Internal server error'
              })
     def delete(self):
@@ -738,8 +754,13 @@ class Cart(Resource):
             if not customer_id or not product_id:
                 return {"error": "Both customer_id and product_id are required"}, 400
                 
-            remove_cart_item(customer_id, product_id)
-            return {"message": "Item removed from cart successfully"}, 200
+            success = remove_cart_item(customer_id, product_id)
+            
+            if success:
+                return {"message": "Item removed from cart successfully"}, 200
+            else:
+                return {"error": "Failed to remove item from cart"}, 500
+                
         except Exception as e:
             return {"error": str(e)}, 500
 
