@@ -182,7 +182,7 @@ def create_order(order_id, customer_id, order_status, order_purchase_timestamp,
         'customer_id': str(customer_id),
         'order_status': str(order_status),
         'order_purchase_timestamp': str(order_purchase_timestamp),
-        'total cost': str(total_cost),
+        'total cost': float(total_cost),
         'opp_id': str(opp_id),
         'First_Name': str(First_Name),
         'LastName': str(LastName),
@@ -437,7 +437,7 @@ order_model = api.model('Order', {
     'customer_id': fields.String(required=True, description='Customer identifier'),
     'order_status': fields.String(required=True, description='Order status'),
     'order_purchase_timestamp': fields.String(required=True, description='Purchase timestamp'),
-    'total_cost': fields.String(required=True, description='Total cost of the order'),
+    'total_cost': fields.Float(required=True, description='Total cost of the order'),
     'First_Name': fields.String(required=True, description='Customer first name'),
     'LastName': fields.String(required=True, description='Customer last name'),
     'Street_Address': fields.String(required=True, description='Street address'),
@@ -454,7 +454,7 @@ order_model = api.model('Order', {
 order_item_model = api.model('OrderItem', {
     'order_id': fields.String(required=True, description='Order identifier'),
     'product_id': fields.String(required=True, description='Product identifier'),
-    'price': fields.String(required=True, description='Price of the item'),
+    'price': fields.Float(required=True, description='Price of the item'),
     'seller_id': fields.String(required=False, description='Seller identifier'),
     'shipping_charges': fields.Float(required=False, default=0, description='Shipping charges')
 })
