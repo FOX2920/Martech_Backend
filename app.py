@@ -671,41 +671,39 @@ class ProductSearch(Resource):
         except Exception as e:
             return {"error": str(e)}, 500
 
+# Cart model for documentation
+cart_model = api.model('Cart', {
+    'customer_id': fields.String(required=True, description='Customer identifier'),
+    'product_id': fields.String(required=True, description='Product identifier')
+})
+
 
 @api.route('/api/cart')
 class Cart(Resource):
     @api.doc('create_cart',
-             params={
-                 'customer_id': 'The ID of the customer',
-                 'product_id': 'The ID of the product'
-             },
              responses={
                  200: 'Success',
-                 400: 'Bad Request',
-                 415: 'Unsupported Media Type',
+                 400: 'Invalid request',
                  500: 'Internal server error'
              })
-    @api.expect(api.model('CartItem', {
-        'customer_id': fields.String(required=True, description='Customer identifier'),
-        'product_id': fields.String(required=True, description='Product identifier')
-    }))
+    @api.expect(cart_model)
     def post(self):
         """Add item to cart"""
-        if not request.is_json:
-            return {"error": "Request must be JSON"}, 415
-            
         try:
-            data = request.get_json()
-            success = create_cart(
-                data['customer_id'],
-                data['product_id']
-            )
+            data = request.json
+            query = """
+                INSERT INTO cart_data (customer_id, product_id)
+                VALUES (%(customer_id)s, %(product_id)s)
+            """
             
-            if success:
-                return {"message": "Item added to cart successfully"}, 200
-            else:
-                return {"error": "Failed to add item to cart"}, 500
-                
+            with cart_engine.connect() as conn:
+                conn.execute(text(query), {
+                    "customer_id": str(data['customer_id']),
+                    "product_id": str(data['product_id'])
+                })
+                conn.commit()
+            
+            return {"message": "Item added to cart successfully"}, 200
         except Exception as e:
             return {"error": str(e)}, 500
 
@@ -713,7 +711,7 @@ class Cart(Resource):
              params={'customer_id': 'The ID of the customer'},
              responses={
                  200: 'Success',
-                 404: 'Cart not found',
+                 400: 'Invalid request',
                  500: 'Internal server error'
              })
     def get(self):
@@ -722,19 +720,27 @@ class Cart(Resource):
             customer_id = request.args.get('customer_id')
             if not customer_id:
                 return {"error": "customer_id is required"}, 400
-                
-            cart_df = get_cart_items(customer_id)
             
-            if cart_df.empty:
+            query = """
+                SELECT c.*, p.*
+                FROM cart_data c
+                JOIN product_data p ON c.product_id = p.product_id
+                WHERE c.customer_id = %(customer_id)s
+            """
+            
+            with cart_engine.connect() as conn:
+                df = pd.read_sql(query, conn, params={"customer_id": str(customer_id)})
+            
+            if df.empty:
                 return {"message": "Cart is empty", "cart_items": []}, 200
-                
+            
             return {
                 "customer_id": customer_id,
-                "cart_items": cart_df.to_dict(orient='records')
+                "cart_items": df.to_dict(orient='records')
             }, 200
         except Exception as e:
             return {"error": str(e)}, 500
-            
+
     @api.doc('delete_cart_item',
              params={
                  'customer_id': 'The ID of the customer',
@@ -742,7 +748,7 @@ class Cart(Resource):
              },
              responses={
                  200: 'Success',
-                 400: 'Bad Request',
+                 400: 'Invalid request',
                  500: 'Internal server error'
              })
     def delete(self):
@@ -753,16 +759,24 @@ class Cart(Resource):
             
             if not customer_id or not product_id:
                 return {"error": "Both customer_id and product_id are required"}, 400
-                
-            success = remove_cart_item(customer_id, product_id)
             
-            if success:
-                return {"message": "Item removed from cart successfully"}, 200
-            else:
-                return {"error": "Failed to remove item from cart"}, 500
-                
+            query = """
+                DELETE FROM cart_data 
+                WHERE customer_id = %(customer_id)s 
+                AND product_id = %(product_id)s
+            """
+            
+            with cart_engine.connect() as conn:
+                conn.execute(text(query), {
+                    "customer_id": str(customer_id),
+                    "product_id": str(product_id)
+                })
+                conn.commit()
+            
+            return {"message": "Item removed from cart successfully"}, 200
         except Exception as e:
             return {"error": str(e)}, 500
+
 
 # Define the request model for user creation
 user_model = api.model('User', {
