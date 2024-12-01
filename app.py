@@ -27,7 +27,8 @@ DATABASE_CONFIG = {
     'EVENT_URI': "postgresql://ptt_db1_user:cM056SikCQhRErxbPOCP6qTXJTnjWsc7@dpg-ct4joh23esus73ffski0-a.oregon-postgres.render.com/ptt_db1",
     'LOG_URI': "postgresql://ptt_db3_user:HNGNAc9xuyZAByLyJUkGqdM0QJbgOXBz@dpg-ct60msbv2p9s7394d94g-a.oregon-postgres.render.com/ptt_db3",
     'PRODUCT_URI': "postgresql://ptt_db3_user:HNGNAc9xuyZAByLyJUkGqdM0QJbgOXBz@dpg-ct60msbv2p9s7394d94g-a.oregon-postgres.render.com/ptt_db3",
-    'ORDER_URI': "postgresql://ptt_db2_user:jCcmpSkXRsKUYWr50uXRwTkvkmD9LVro@dpg-ct4jp4aj1k6c73egvbq0-a.oregon-postgres.render.com/ptt_db2"
+    'ORDER_URI': "postgresql://ptt_db2_user:jCcmpSkXRsKUYWr50uXRwTkvkmD9LVro@dpg-ct4jp4aj1k6c73egvbq0-a.oregon-postgres.render.com/ptt_db2",
+    'CART_URI': "postgresql://ptt_db2_user:jCcmpSkXRsKUYWr50uXRwTkvkmD9LVro@dpg-ct4jp4aj1k6c73egvbq0-a.oregon-postgres.render.com/ptt_db2"
 }
 
 # Create database engines
@@ -35,7 +36,7 @@ event_engine = create_engine(DATABASE_CONFIG['EVENT_URI'])
 log_engine = create_engine(DATABASE_CONFIG['LOG_URI'])
 product_engine = create_engine(DATABASE_CONFIG['PRODUCT_URI'])
 order_engine = create_engine(DATABASE_CONFIG['ORDER_URI'])
-
+cart_engine = create_engine(DATABASE_CONFIG['CART_URI'])
 # Configure Google AI
 GOOGLE_API_KEY = "AIzaSyDsql1chYKQ0mI68UyhYbgBIfSK2czni3Y"
 genai.configure(api_key=GOOGLE_API_KEY)
