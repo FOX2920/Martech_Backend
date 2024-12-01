@@ -137,7 +137,7 @@ def create_cart(customer_id, id_product):
         'id_product': str(id_product),
     }
     df = pd.DataFrame([data])
-    df.to_sql("order_data", cart_engine, if_exists='append', index=False)
+    df.to_sql("cart_data", cart_engine, if_exists='append', index=False)
     return True
         
 
@@ -653,7 +653,7 @@ class Cart(Resource):
                  500: 'Internal server error'
              })
     @api.expect(cart_model)
-   def post(self):
+    def post(self):
         """Create a new order"""
         try:
             data = request.json
