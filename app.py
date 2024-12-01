@@ -131,14 +131,46 @@ def find_top_n_related_items_by_keyword_gia(keyword, gia, top_n=10):
         return None
 
 def create_cart(customer_id, product_id):
-    """Create a new cart entry."""
-    data = {
-        'customer_id': str(customer_id),
-        'product_id': str(product_id)
-    }
-    df = pd.DataFrame([data])
-    df.to_sql("cart_data", order_engine, if_exists='append', index=False)
-    return True
+    """
+    Create a new cart entry or update existing one.
+    Args:
+        customer_id (str): Customer ID
+        product_id (str): Product ID
+    Returns:
+        bool: True if successful, raises exception otherwise
+    """
+    try:
+        # First check if the item already exists in cart
+        check_query = text("""
+            SELECT * FROM cart_data 
+            WHERE customer_id = :customer_id 
+            AND product_id = :product_id
+        """)
+        
+        with cart_engine.connect() as conn:
+            result = conn.execute(check_query, {
+                "customer_id": str(customer_id),
+                "product_id": str(product_id)
+            })
+            existing_item = result.fetchone()
+            
+            if existing_item is None:
+                # If item doesn't exist, create new entry
+                insert_query = text("""
+                    INSERT INTO cart_data (customer_id, product_id)
+                    VALUES (:customer_id, :product_id)
+                """)
+                conn.execute(insert_query, {
+                    "customer_id": str(customer_id),
+                    "product_id": str(product_id)
+                })
+                conn.commit()
+                
+        return True
+        
+    except Exception as e:
+        print(f"Error in create_cart: {e}")
+        raise
     
 # New helper functions
 def record_event(customer_id, product_id, record_type):
